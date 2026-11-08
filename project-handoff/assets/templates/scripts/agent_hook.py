@@ -5,6 +5,8 @@ import fcntl
 import hashlib
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 import sys
 from datetime import datetime, timedelta
@@ -154,18 +156,142 @@ def cmd_disable(root: Path) -> int:
     return 0
 
 
+def _git_head(root: Path) -> str:
+    try:
+        out = subprocess.run(['git', '-C', str(root), 'rev-parse', '--short', 'HEAD'],
+                             capture_output=True, text=True, timeout=5)
+        return out.stdout.strip() if out.returncode == 0 else '-'
+    except Exception:
+        return '-'
+
+
+def _run_state(run: Path) -> dict:
+    try:
+        return json.loads((run / 'runtime.json').read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _handover_note(run: Path) -> str:
+    """被归档 run 的一句话摘要：handover.md 第一个非标题非空行，截 80 字。"""
+    try:
+        for line in (run / 'handover.md').read_text().splitlines():
+            s = line.strip()
+            if s and not s.startswith('#'):
+                return s[:80]
+    except OSError:
+        pass
+    return '-'
+
+
+def _rotate_runs(runs_dir: Path, keep_per_agent: int, min_per_agent: int,
+                 index_max_lines: int, head: str) -> int:
+    if not runs_dir.is_dir():
+        return 0
+    by_agent = {}
+    for run in runs_dir.iterdir():
+        if run.is_dir() and run.name != 'archive':
+            by_agent.setdefault(run.name.split('-', 1)[0], []).append(run)
+    archived, index_lines = 0, []
+    for agent, dirs in by_agent.items():
+        if len(dirs) <= keep_per_agent:
+            continue
+        dirs.sort(key=lambda d: _run_state(d).get('started_at', ''))
+        droppable = len(dirs) - keep_per_agent
+        allowed = droppable if len(dirs) - droppable >= min_per_agent \
+            else max(len(dirs) - min_per_agent, 0)
+        for run in dirs[:allowed]:
+            state = _run_state(run)
+            flag = '[中断] ' if state.get('interrupted') else ''
+            index_lines.append(
+                f"- {flag}{state.get('started_at', '-')} | {state.get('agent', agent)} | "
+                f"{state.get('session_id', '-')} | {head} | {_handover_note(run)}")
+            shutil.rmtree(run, ignore_errors=True)
+            archived += 1
+    if index_lines:
+        archive_dir = runs_dir / 'archive'
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        index = archive_dir / 'index.md'
+        old = index.read_text().splitlines() if index.is_file() else []
+        index.write_text('\n'.join((old + index_lines)[-index_max_lines:]) + '\n')
+    return archived
+
+
+def _compact_handover(root: Path, max_bytes: int, max_lines: int, keep_sections: int) -> str:
+    handover = root / 'HANDOVER.md'
+    if not handover.is_file():
+        return ''
+    text = handover.read_text()
+    if len(text.encode()) <= max_bytes and len(text.splitlines()) <= max_lines:
+        return ''
+    preamble, sections, current = [], [], None
+    for line in text.splitlines(keepends=True):
+        if line.startswith('## '):
+            current = [line]
+            sections.append(current)
+        elif current is None:
+            preamble.append(line)
+        else:
+            current.append(line)
+    if len(sections) <= keep_sections:
+        return ''  # 无小节结构或小节太少：遗留内容一字不动
+    moved, kept = sections[:-keep_sections], sections[-keep_sections:]
+    archive_dir = root / 'docs' / 'execution' / 'handoff-archive'
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    archive = archive_dir / (datetime.now().astimezone().strftime('%Y%m%d-%H%M%S') + '.md')
+    archive.write_text('# 历史交接小节（--gc 归档）\n\n' + ''.join(''.join(s) for s in moved))
+    pointer = (f'\n- 已归档 {len(moved)} 个历史小节：'
+               f'docs/execution/handoff-archive/{archive.name}（agent 默认不读）\n')
+    handover.write_text(''.join(preamble) + ''.join(''.join(s) for s in kept) + pointer)
+    return archive.name
+
+
+def _dir_size(path: Path) -> int:
+    return sum(f.stat().st_size for f in path.rglob('*') if f.is_file()) if path.is_dir() else 0
+
+
+def _count_runs(runs_dir: Path) -> int:
+    return sum(1 for d in runs_dir.iterdir()
+               if d.is_dir() and d.name != 'archive') if runs_dir.is_dir() else 0
+
+
+def cmd_gc(root: Path, keep_per_agent: int = 20, min_per_agent: int = 2,
+           index_max_lines: int = 200, handover_max_bytes: int = 8192,
+           handover_max_lines: int = 300, keep_sections: int = 3) -> int:
+    exec_dir = root / 'docs' / 'execution'
+    runs_dir = exec_dir / 'agent-runs'
+    before_bytes, before_runs = _dir_size(exec_dir), _count_runs(runs_dir)
+    recovered = recover_orphans(runs_dir, datetime.now().astimezone())
+    head = _git_head(root)
+    archived = _rotate_runs(runs_dir, keep_per_agent, min_per_agent, index_max_lines, head)
+    compacted = _compact_handover(root, handover_max_bytes, handover_max_lines, keep_sections)
+    handover = root / 'HANDOVER.md'
+    print(f'--gc 完成：回收孤儿 {len(recovered)} 个；归档 run {archived} 个'
+          f'（每 agent 保留 {keep_per_agent}，至少 {min_per_agent}）；'
+          f'HANDOVER {"已瘦身（归档 " + compacted + "）" if compacted else "未变"}。')
+    print(f'占用：docs/execution {before_bytes} → {_dir_size(exec_dir)} 字节；'
+          f'run {before_runs} → {_count_runs(runs_dir)} 个；'
+          f'HANDOVER {handover.stat().st_size if handover.is_file() else 0} 字节。')
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--agent', default=None, choices=['Codex', 'ZCode', 'QwenWork'])
     parser.add_argument('--enable', action='store_true')
     parser.add_argument('--disable', action='store_true')
+    parser.add_argument('--gc', action='store_true')
     args = parser.parse_args()
-    if args.enable or args.disable:
+    if args.enable or args.disable or args.gc:
         root = resolve_project_root(Path.cwd(), Path.home())
         if root is None:
             print('未找到项目根（向上未命中 .agent-handoff.json 或 .git），未做任何修改。')
             return 2
-        return cmd_enable(root) if args.enable else cmd_disable(root)
+        if args.enable:
+            return cmd_enable(root)
+        if args.disable:
+            return cmd_disable(root)
+        return cmd_gc(root)
     if not args.agent:
         parser.error('事件模式需要 --agent；命令模式见 --enable / --disable')
     event = json.load(sys.stdin)
