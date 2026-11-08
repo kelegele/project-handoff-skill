@@ -24,6 +24,6 @@ Codex, ZCode and Kimi Code CLI have separate instruction entry points. Optional 
 
 Session logs stay inside each project. The hook stores event metadata and creates a handoff note for the agent to complete. Keep generated run directories out of public repositories if the notes contain private task details.
 
-## Release status
+## License
 
-Local release draft. Suggested license: MIT, pending maintainer approval.
+[MIT](LICENSE).

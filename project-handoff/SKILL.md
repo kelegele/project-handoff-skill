@@ -1,6 +1,7 @@
 ---
 name: project-handoff
 description: Install or manage opt-in project handoff for coding agents. Use when the user wants a new-session handoff prompt, shared AGENTS.md instructions, per-project on/off choices, cross-agent handover, or optional local run logs.
+license: MIT
 ---
 
 # Project handoff
