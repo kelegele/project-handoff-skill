@@ -255,6 +255,107 @@ def _count_runs(runs_dir: Path) -> int:
                if d.is_dir() and d.name != 'archive') if runs_dir.is_dir() else 0
 
 
+HOOK_CONFIGS = {'.codex/hooks.json': 'Codex', '.zcode/config.json': 'ZCode',
+                '.qwen/settings.json': 'QwenWork'}
+
+
+def _hook_chain(root: Path):
+    """项目内各家钩子配置的接线状态：(agent, 相对路径, 状态)。"""
+    chain = []
+    for rel, agent in HOOK_CONFIGS.items():
+        path = root / rel
+        if not path.is_file():
+            chain.append((agent, rel, '未接线'))
+            continue
+        try:
+            text = path.read_text()
+        except OSError:
+            chain.append((agent, rel, '存在但不可读'))
+            continue
+        chain.append((agent, rel, '存在且命令指向本系统脚本' if 'agent_hook.py' in text
+                      else '存在但未指向本系统脚本'))
+    return chain
+
+
+def cmd_status(root: Path) -> int:
+    settings, err = load_config(root / '.agent-handoff.json')
+    print('== project-handoff 状态 ==')
+    if settings is None:
+        print(f'模式：配置无效（{err}）')
+    else:
+        print(f"模式：{'开启' if settings.get('enabled') else '关闭'}"
+              f"（schema v{settings.get('version')}）")
+    print('入口链：')
+    for agent, rel, state in _hook_chain(root):
+        print(f'  - {agent}（{rel}）：{state}')
+    print('文件所有权（以下属于本系统）：.agent-handoff.json、AGENTS.md「多 Agent 交接」段、'
+          'HANDOVER.md、docs/execution/（运行记录与归档）')
+    runs_dir = root / 'docs' / 'execution' / 'agent-runs'
+    print('最近运行：')
+    recent = []
+    if runs_dir.is_dir():
+        recent = sorted(((d, _run_state(d)) for d in runs_dir.iterdir()
+                         if d.is_dir() and d.name != 'archive'),
+                        key=lambda t: t[1].get('updated_at', ''), reverse=True)[:3]
+    if recent:
+        for d, state in recent:
+            print(f"  - {state.get('agent', '?')} {state.get('started_at', '?')} "
+                  f"last={state.get('last_event', '?')}（{d.name}）")
+    else:
+        print('  （暂无运行记录）')
+    exec_dir = root / 'docs' / 'execution'
+    handover = root / 'HANDOVER.md'
+    print(f'占用：docs/execution {_dir_size(exec_dir)} 字节、run {_count_runs(runs_dir)} 个；'
+          f'HANDOVER {handover.stat().st_size if handover.is_file() else 0} 字节')
+    print(f'如何关闭：python3 {Path(__file__).resolve()} --disable（保留全部记录）；'
+          f'彻底卸载：删 .agent-handoff.json 与 docs/execution/，删 AGENTS.md 交接段')
+    return 0
+
+
+def cmd_doctor(root: Path) -> int:
+    failures, warns = [], []
+
+    def check(ok, label, detail=''):
+        print(f"{'[PASS]' if ok else '[FAIL]'} {label}{': ' + detail if detail else ''}")
+        if not ok:
+            failures.append(label)
+
+    def warn(label, detail=''):
+        print(f'[WARN] {label}{": " + detail if detail else ""}')
+        warns.append(label)
+
+    check(sys.version_info >= (3, 9), 'Python >= 3.9', sys.version.split()[0])
+    settings, err = load_config(root / '.agent-handoff.json')
+    check(settings is not None, '配置可解析',
+          err or f"v{settings.get('version')} enabled={settings.get('enabled')}")
+    now = datetime.now().astimezone()
+    check(now.utcoffset() is not None, '本地时区生效', str(now.tzinfo))
+    exec_dir = root / 'docs' / 'execution'
+    try:
+        exec_dir.mkdir(parents=True, exist_ok=True)
+        probe = exec_dir / '.doctor-probe'
+        probe.write_text('')
+        probe.unlink()
+        check(True, 'docs/execution 可写')
+    except OSError as exc:
+        check(False, 'docs/execution 可写', type(exc).__name__)
+    for agent, rel, state in _hook_chain(root):
+        if state == '未接线':
+            warn('入口链', f'{agent}（{rel}）未接线——文件交接仍可用（L0/L1）')
+        elif '未指向' in state or '不可读' in state:
+            warn('入口链', f'{agent}（{rel}）{state}')
+    agents_md = root / 'AGENTS.md'
+    check(agents_md.is_file() and AGENTS_SECTION_MARKER in agents_md.read_text(),
+          'AGENTS.md 交接段在位')
+    if (root / 'HANDOVER.md').is_file():
+        print('[PASS] HANDOVER.md 在位')
+    else:
+        warn('HANDOVER.md 不存在', '关闭状态或从未启用时正常；启用后建议存在')
+    print(f'结论：{"发现 FAIL" if failures else "无 FAIL"}（{len(warns)} 条 WARN）。'
+          f'详情：python3 {Path(__file__).resolve()} --status')
+    return 1 if failures else 0
+
+
 def cmd_gc(root: Path, keep_per_agent: int = 20, min_per_agent: int = 2,
            index_max_lines: int = 200, handover_max_bytes: int = 8192,
            handover_max_lines: int = 300, keep_sections: int = 3) -> int:
@@ -281,8 +382,10 @@ def main():
     parser.add_argument('--enable', action='store_true')
     parser.add_argument('--disable', action='store_true')
     parser.add_argument('--gc', action='store_true')
+    parser.add_argument('--status', action='store_true')
+    parser.add_argument('--doctor', action='store_true')
     args = parser.parse_args()
-    if args.enable or args.disable or args.gc:
+    if args.enable or args.disable or args.gc or args.status or args.doctor:
         root = resolve_project_root(Path.cwd(), Path.home())
         if root is None:
             print('未找到项目根（向上未命中 .agent-handoff.json 或 .git），未做任何修改。')
@@ -291,6 +394,10 @@ def main():
             return cmd_enable(root)
         if args.disable:
             return cmd_disable(root)
+        if args.status:
+            return cmd_status(root)
+        if args.doctor:
+            return cmd_doctor(root)
         return cmd_gc(root)
     if not args.agent:
         parser.error('事件模式需要 --agent；命令模式见 --enable / --disable')
