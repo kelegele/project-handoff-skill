@@ -178,6 +178,11 @@ git -C ~/.agents/skills/project-handoff pull   # 全局安装的路径；项目�
 
 遇到问题或有想法，欢迎 [提 issue](https://github.com/kelegele/project-handoff-skill/issues)。
 
+## 相关项目
+
+- [agentsmd-skill](https://github.com/kelegele/agentsmd-skill)——把会话教训固化成 AGENTS.md 规则。agentsmd 管「怎么干」，project-handoff 管「干到哪」。
+- 博客文章：[使用指南](https://www.kelegele.com/blog/project-handoff-scene-guide) · [agentsmd 使用指南](https://www.kelegele.com/blog/agentsmd-scene-guide) · [agentsmd 设计哲学](https://www.kelegele.com/blog/agents-md-lessons-without-bloat)
+
 ## 作者
 
 **[kelegele](https://github.com/kelegele)** · [kelegele.com](https://kelegele.com) · 更多 agent 工具见 [GitHub](https://github.com/kelegele?tab=repositories)

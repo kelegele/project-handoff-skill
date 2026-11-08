@@ -178,6 +178,11 @@ No. Home and temp directories are never treated as projects; root resolution onl
 
 Issues and ideas are welcome at [GitHub Issues](https://github.com/kelegele/project-handoff-skill/issues).
 
+## Related
+
+- [agentsmd-skill](https://github.com/kelegele/agentsmd-skill) — solidify session lessons into AGENTS.md rules. agentsmd remembers *how* to work; project-handoff remembers *where you left off*.
+- Blog: [usage guide](https://www.kelegele.com/blog/project-handoff-scene-guide) · [agentsmd scene guide](https://www.kelegele.com/blog/agentsmd-scene-guide) · [agentsmd design philosophy](https://www.kelegele.com/blog/agents-md-lessons-without-bloat)
+
 ## Author
 
 **[kelegele](https://github.com/kelegele)** · [kelegele.com](https://kelegele.com) · more agent tooling on [GitHub](https://github.com/kelegele?tab=repositories)
