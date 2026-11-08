@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 EVENTS = {'SessionStart', 'UserPromptSubmit', 'Stop', 'Interrupt', 'SessionEnd'}
 
@@ -55,6 +55,51 @@ def write_config(root: Path, settings: dict) -> None:
     atomic_json(root / '.agent-handoff.json', merged)
 
 
+def heartbeat_payload(pid, now: datetime) -> str:
+    """单行 JSON：心跳为主，PID 仅附带（钩子进程短命，自身 PID 无判定价值）。"""
+    return json.dumps({'heartbeat': now.isoformat(timespec='seconds'),
+                       'pid': pid if isinstance(pid, int) else None}, ensure_ascii=False) + '\n'
+
+
+def _lock_idle(lock: Path, now: datetime):
+    """锁的闲置时长；空锁或无法解析返回 None（按陈旧处理）。"""
+    try:
+        lines = [line for line in lock.read_text().splitlines() if line.strip()]
+        heartbeat = datetime.fromisoformat(json.loads(lines[-1])['heartbeat'])
+        return now - heartbeat
+    except (ValueError, IndexError, KeyError, TypeError):
+        return None
+
+
+def recover_orphans(runs_dir: Path, now: datetime, max_idle_minutes: int = 30):
+    """心跳超时且未正常关闭的 run 标记中断并清锁；返回回收的 run_id 列表。"""
+    recovered = []
+    if not runs_dir.is_dir():
+        return recovered
+    for run in sorted(runs_dir.iterdir()):
+        if not run.is_dir():
+            continue
+        lock, runtime_path = run / '.lock', run / 'runtime.json'
+        if not lock.is_file() or not runtime_path.is_file():
+            continue
+        try:
+            state = json.loads(runtime_path.read_text())
+        except ValueError:
+            continue
+        if state.get('last_event') == 'SessionEnd':
+            continue
+        idle = _lock_idle(lock, now)
+        if idle is not None and idle <= timedelta(minutes=max_idle_minutes):
+            continue
+        state.update(interrupted=True, runtime_status='已中断（孤儿回收），待接手',
+                     updated_at=now.isoformat(timespec='seconds'),
+                     orphan_recovered_at=now.isoformat(timespec='seconds'))
+        atomic_json(runtime_path, state)
+        lock.unlink()
+        recovered.append(state.get('run_id', run.name))
+    return recovered
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--agent', required=True, choices=['Codex', 'ZCode', 'QwenWork'])
@@ -73,13 +118,20 @@ def main():
     session = event.get('session_id')
     if name not in EVENTS or not isinstance(session, str) or not session:
         return
-    now = datetime.now().astimezone().isoformat(timespec='seconds')
+    now_dt = datetime.now().astimezone()
+    now = now_dt.isoformat(timespec='seconds')
     key = hashlib.sha256(session.encode()).hexdigest()[:20]
-    folder = ROOT / 'docs/execution/agent-runs' / f'{args.agent}-{key}'
+    runs_dir = ROOT / 'docs/execution/agent-runs'
+    if name == 'SessionStart':
+        recover_orphans(runs_dir, now_dt)
+    folder = runs_dir / f'{args.agent}-{key}'
     folder.mkdir(parents=True, exist_ok=True)
     # Per-session lock protects concurrent events; human notes are created once only.
+    pid = event.get('pid')
     with (folder / '.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        lock.truncate(0)
+        lock.write(heartbeat_payload(pid, now_dt))
         runtime = folder / 'runtime.json'
         state = json.loads(runtime.read_text()) if runtime.exists() else {}
         state.update(agent=args.agent, session_id=session, updated_at=now,
