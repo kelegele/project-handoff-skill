@@ -176,6 +176,10 @@ git -C ~/.agents/skills/project-handoff pull   # 全局安装的路径；项目�
 
 遇到问题或有想法，欢迎 [提 issue](https://github.com/kelegele/project-handoff-skill/issues)。
 
+## 作者
+
+**[kelegele](https://github.com/kelegele)** · [kelegele.com](https://kelegele.com) · 更多 agent 工具见 [GitHub](https://github.com/kelegele?tab=repositories)
+
 ## License
 
 [MIT](LICENSE)
