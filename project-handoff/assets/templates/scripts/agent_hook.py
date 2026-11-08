@@ -100,10 +100,74 @@ def recover_orphans(runs_dir: Path, now: datetime, max_idle_minutes: int = 30):
     return recovered
 
 
+AGENTS_SECTION_MARKER = '## 多 Agent 交接'
+
+
+def _templates_dir() -> Path:
+    """模板目录：随资产分发（本文件位于 templates/scripts/ 之下，上一级即 templates）。"""
+    return Path(__file__).resolve().parent.parent
+
+
+def cmd_enable(root: Path) -> int:
+    config_path = root / '.agent-handoff.json'
+    if config_path.is_file():
+        settings, err = load_config(config_path)
+        if settings is None:
+            print(err)
+            print('未修改任何文件；请先修复或确认该配置后再启用。')
+            return 2
+    else:
+        settings = {}  # 全新项目：缺失不等于损坏，按默认开启
+    settings['enabled'] = True
+    write_config(root, settings)
+    changed = ['.agent-handoff.json（version 2，enabled: true）']
+    agents_md = root / 'AGENTS.md'
+    current = agents_md.read_text() if agents_md.is_file() else ''
+    if AGENTS_SECTION_MARKER not in current:
+        with agents_md.open('a') as f:
+            if current and not current.endswith('\n'):
+                f.write('\n')
+            f.write((_templates_dir() / 'AGENTS.section.md').read_text())
+        changed.append('AGENTS.md（追加「多 Agent 交接」段）')
+    handover = root / 'HANDOVER.md'
+    if not handover.exists():
+        handover.write_text((_templates_dir() / 'HANDOVER.md').read_text())
+        changed.append('HANDOVER.md（新建模板）')
+    print('已启用项目交接。变更：')
+    for line in changed:
+        print(f'- {line}')
+    print(f'验证：python3 {Path(__file__).resolve()} --doctor')
+    return 0
+
+
+def cmd_disable(root: Path) -> int:
+    settings, err = load_config(root / '.agent-handoff.json')
+    if settings is None:
+        print(err)
+        print('未修改任何文件。')
+        return 2
+    settings['enabled'] = False
+    write_config(root, settings)
+    print('已关闭项目交接：.agent-handoff.json enabled=false。')
+    print('保留：AGENTS.md 交接段、HANDOVER.md、docs/execution/ 运行记录（均未删除）。')
+    print('彻底移除：删除 .agent-handoff.json 与 docs/execution/，并自行删去 AGENTS.md 交接段。')
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--agent', required=True, choices=['Codex', 'ZCode', 'QwenWork'])
+    parser.add_argument('--agent', default=None, choices=['Codex', 'ZCode', 'QwenWork'])
+    parser.add_argument('--enable', action='store_true')
+    parser.add_argument('--disable', action='store_true')
     args = parser.parse_args()
+    if args.enable or args.disable:
+        root = resolve_project_root(Path.cwd(), Path.home())
+        if root is None:
+            print('未找到项目根（向上未命中 .agent-handoff.json 或 .git），未做任何修改。')
+            return 2
+        return cmd_enable(root) if args.enable else cmd_disable(root)
+    if not args.agent:
+        parser.error('事件模式需要 --agent；命令模式见 --enable / --disable')
     event = json.load(sys.stdin)
     if not isinstance(event, dict) or not isinstance(event.get('cwd'), str):
         return
@@ -185,7 +249,9 @@ def main():
 
 if __name__ == '__main__':
     try:
-        main()
+        sys.exit(main())
+    except SystemExit:
+        raise
     except Exception as exc:
         # A journal failure must never block unrelated work or reveal input data.
         print(f'Project handoff hook: recording failed ({type(exc).__name__}); task may continue.', file=sys.stderr)

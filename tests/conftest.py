@@ -29,6 +29,15 @@ def make_project(tmp_path, config=V1_CONFIG, git=True, home=None):
     return project
 
 
+def run_cmd(project, *flags, home=None):
+    """Run the repo SCRIPT directly (central-copy command model) with cwd=project."""
+    env = dict(os.environ)
+    if home is not None:
+        env['HOME'] = str(home)
+    return subprocess.run(['python3', str(SCRIPT), *flags],
+                          capture_output=True, text=True, cwd=str(project), env=env)
+
+
 def run_hook(project, agent='Codex', event=None, cwd=None, home=None, raw_stdin=None):
     """Deploy SCRIPT into project/scripts/ (v1 model) and run it as a subprocess."""
     deployed = project / 'scripts' / 'agent_hook.py'
