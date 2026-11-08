@@ -32,6 +32,29 @@ def atomic_json(path, value):
     os.replace(tmp, path)
 
 
+def load_config(path: Path):
+    """宽容读取：v1/v2 均有效，多余键保留；返回 (settings, None) 或 (None, 具体错误消息)。"""
+    if not path.is_file():
+        return None, f'配置文件不存在：{path.name}'
+    try:
+        settings = json.loads(path.read_text())
+    except ValueError:
+        return None, '配置不是合法 JSON，未做任何修改'
+    if not isinstance(settings, dict):
+        return None, '配置必须是 JSON 对象'
+    if settings.get('version') not in (1, 2):
+        return None, f"不支持的配置 version：{settings.get('version')!r}（仅支持 1 或 2）"
+    if not isinstance(settings.get('enabled'), bool):
+        return None, '配置缺少布尔型 enabled 字段'
+    return settings, None
+
+
+def write_config(root: Path, settings: dict) -> None:
+    merged = dict(settings)
+    merged['version'] = 2
+    atomic_json(root / '.agent-handoff.json', merged)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--agent', required=True, choices=['Codex', 'ZCode', 'QwenWork'])
@@ -43,11 +66,8 @@ def main():
     ROOT = resolve_project_root(cwd, Path.home())
     if ROOT is None:
         return
-    config_path = ROOT / ".agent-handoff.json"
-    if not config_path.is_file():
-        return
-    settings = json.loads(config_path.read_text())
-    if settings.get("version") != 1 or settings.get("enabled") is not True:
+    settings, config_error = load_config(ROOT / '.agent-handoff.json')
+    if settings is None or settings.get('enabled') is not True:
         return
     name = event.get('hook_event_name')
     session = event.get('session_id')
