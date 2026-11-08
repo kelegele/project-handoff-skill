@@ -11,3 +11,7 @@
 /out/
 /.v2c/
 /.video_agent/
+
+# Local worktrees and plan workspaces
+/.worktrees/
+/.superpowers/
