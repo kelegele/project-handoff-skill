@@ -9,8 +9,21 @@ from pathlib import Path
 import sys
 from datetime import datetime
 
-ROOT = Path(__file__).resolve().parent.parent
 EVENTS = {'SessionStart', 'UserPromptSubmit', 'Stop', 'Interrupt', 'SessionEnd'}
+
+
+def resolve_project_root(start: Path, home: Path):
+    """根解析契约（设计 §6.4）：从 start 逐级向上；每级先查 .agent-handoff.json 再查 .git；
+    home 与文件系统根本身永不被当作项目。命中即返回该目录，未命中返回 None。"""
+    d = start
+    while True:
+        if d == home or d == d.parent:
+            return None
+        if (d / '.agent-handoff.json').is_file():
+            return d
+        if (d / '.git').exists():
+            return d
+        d = d.parent
 
 
 def atomic_json(path, value):
@@ -23,17 +36,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--agent', required=True, choices=['Codex', 'ZCode', 'QwenWork'])
     args = parser.parse_args()
+    event = json.load(sys.stdin)
+    if not isinstance(event, dict) or not isinstance(event.get('cwd'), str):
+        return
+    cwd = Path(event['cwd']).resolve()
+    ROOT = resolve_project_root(cwd, Path.home())
+    if ROOT is None:
+        return
     config_path = ROOT / ".agent-handoff.json"
     if not config_path.is_file():
         return
     settings = json.loads(config_path.read_text())
     if settings.get("version") != 1 or settings.get("enabled") is not True:
-        return
-    event = json.load(sys.stdin)
-    if not isinstance(event, dict) or not isinstance(event.get('cwd'), str):
-        return
-    cwd = Path(event['cwd']).resolve()
-    if not cwd.is_relative_to(ROOT):
         return
     name = event.get('hook_event_name')
     session = event.get('session_id')
