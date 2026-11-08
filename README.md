@@ -16,7 +16,15 @@ project-handoff 把交接变成项目里的一组文件：新会话开工前先�
 
 ## 30 秒开始
 
-把仓库发给你的 agent：
+```bash
+npx skills add kelegele/project-handoff-skill
+```
+
+装好后，对 AI 说：
+
+> 用 project-handoff 给这个项目配置交接模式
+
+不想动手装？直接把仓库地址发给你的 agent：
 
 > 帮我安装这个 skill：https://github.com/kelegele/project-handoff-skill ，装好后告诉我怎么用。
 
@@ -57,7 +65,13 @@ project-handoff 把交接变成项目里的一组文件：新会话开工前先�
 
 ## 安装
 
-### Agent Skills 客户端
+### npx skills（推荐）
+
+```bash
+npx skills add kelegele/project-handoff-skill
+```
+
+### 手动放入技能目录
 
 把仓库放进技能目录，目录名须为 `project-handoff`：
 
@@ -105,11 +119,21 @@ project-handoff-skill/
 
 ## 更新
 
-git clone 安装的拉取最新；手动复制 / Release 下载的重新覆盖一遍：
+按当初的安装方式对应操作（各版本变更内容见 [CHANGELOG](CHANGELOG.md)）：
+
+**npx skills 安装**：用 CLI 自带的更新命令
 
 ```bash
-git -C ~/.agents/skills/project-handoff pull
+npx skills update project-handoff   # 只更新这一个；不带名字则更新全部
 ```
+
+**git clone 安装**：进入克隆目录拉取最新
+
+```bash
+git -C ~/.agents/skills/project-handoff pull   # 全局安装的路径；项目内安装换成对应目录
+```
+
+**手动复制 / Release 下载**：重新覆盖一遍技能目录里的 `project-handoff/`。
 
 > 更新后部分 agent 需重启或新开对话才能加载新版。
 
