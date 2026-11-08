@@ -1,0 +1,13 @@
+# Local project handoff configuration and records
+/.agent-handoff.json
+/.codex/
+/AGENTS.md
+/HANDOVER.md
+/scripts/agent_hook.py
+/docs/execution/agent-runs/
+
+# Local packaging and tool output
+/project-handoff.skill
+/out/
+/.v2c/
+/.video_agent/
