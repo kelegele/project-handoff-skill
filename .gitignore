@@ -19,3 +19,7 @@
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Local drafts and planning files (stay out of the public repo)
+/docs/articles/
+/docs/superpowers/
