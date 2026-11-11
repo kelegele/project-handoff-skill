@@ -256,7 +256,7 @@ def _count_runs(runs_dir: Path) -> int:
 
 
 HOOK_CONFIGS = {'.codex/hooks.json': 'Codex', '.zcode/config.json': 'ZCode',
-                '.qwen/settings.json': 'QwenWork'}
+                '.qwen/settings.json': 'QwenWork', '.pi/extensions/project-handoff.ts': 'Pi'}
 
 
 def _hook_chain(root: Path):
@@ -378,7 +378,7 @@ def cmd_gc(root: Path, keep_per_agent: int = 20, min_per_agent: int = 2,
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--agent', default=None, choices=['Codex', 'ZCode', 'QwenWork'])
+    parser.add_argument('--agent', default=None, choices=['Codex', 'ZCode', 'QwenWork', 'Pi'])
     parser.add_argument('--enable', action='store_true')
     parser.add_argument('--disable', action='store_true')
     parser.add_argument('--gc', action='store_true')

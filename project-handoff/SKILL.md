@@ -23,6 +23,7 @@ Install the startup instructions when the user asks to set up this workflow. For
 | Codex | `~/.codex/AGENTS.md` |
 | ZCode | `~/.zcode/AGENTS.md` |
 | Kimi Code CLI | `~/.kimi-code/AGENTS.md` |
+| Pi | `~/.pi/AGENTS.md` |
 
 5. Read back the pointer chain. Verify on a new session when possible. Distinguish file installation, instruction loading, and actual hook execution in your report.
 
@@ -30,4 +31,4 @@ Install the startup instructions when the user asks to set up this workflow. For
 
 The project root's `.agent-handoff.json` is the shared choice. Ask once per session if the file is missing. On enable, merge handoff rules and install only compatible optional hooks. On disable, save the false setting. On defer, leave the choice unset. Honor existing valid choices and report invalid settings. Switch an existing choice only at the user's request.
 
-Use the templates in `assets/templates/`. Never overwrite existing handoff notes or unrelated hook entries. If a client has no verified lifecycle hook entry point, use file-based handoff. Keep runtime records separate from task completion evidence.
+Use the templates in `assets/templates/`. Pi has no hooks config: wire it with the project-local extension template `.pi/extensions/project-handoff.ts` (set `HOOK_SCRIPT` to the shared `agent_hook.py` absolute path; it forwards lifecycle events with `--agent Pi`). Never overwrite existing handoff notes or unrelated hook entries. If a client has no verified lifecycle hook entry point, use file-based handoff. Keep runtime records separate from task completion evidence.

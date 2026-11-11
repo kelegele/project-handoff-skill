@@ -2,6 +2,14 @@
 
 版本号：vMAJOR.MINOR.PATCH。MINOR 功能新增、PATCH 修订、MAJOR 架构级变更。
 
+## v0.2.0 - 2026-11-12
+
+### Added
+
+- pi 客户端支持：新增薄适配扩展模板 `.pi/extensions/project-handoff.ts`，把 pi 生命周期事件（session_start / before_agent_start / agent_settled / session_shutdown）转成 Claude 风格钩子协议喂给共享 `agent_hook.py`，记录逻辑零重写；additionalContext 仅在会话启动注入一次，systemMessage 走 UI 通知
+- `--agent` 新增 `Pi`；`HOOK_CONFIGS` 新增 `.pi` 接线项，`--status` / `--doctor` 可报 pi 接线状态
+- SKILL.md 客户端表新增 Pi（`~/.pi/AGENTS.md`）及扩展接线说明
+
 ## v0.1.0 - 2026-11-08
 
 首个公开发布。
