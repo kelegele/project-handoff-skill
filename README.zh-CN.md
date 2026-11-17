@@ -79,6 +79,9 @@ npx skills add kelegele/project-handoff-skill
 | `agent_hook.py --doctor` | 体检：配置 / 钩子接线 / 权限 / 时区 |
 | `agent_hook.py --status` | 自解释报告：模式、入口链、文件所有权、最近运行、占用、卸载方法 |
 | `agent_hook.py --gc` | 轮转运行记录 + 交接记录瘦身 |
+| `agent_hook.py --kimi-hooks enable` | 独立启用 Kimi CLI 用户级 Hooks，不随项目开关隐式执行 |
+| `agent_hook.py --kimi-hooks status` | 只读查看 Kimi CLI 接线状态 |
+| `agent_hook.py --kimi-hooks disable` | 停用 Kimi CLI 自动记录，只移除本系统受管块 |
 
 ## 安装
 
@@ -110,8 +113,11 @@ npx skills add kelegele/project-handoff-skill
 |---|---|---|
 | Codex | `~/.codex/AGENTS.md` | ✅ 钩子已在真实会话实证 |
 | ZCode | `~/.zcode/AGENTS.md` | 模板就绪，真实会话验收中 |
-| Kimi Code CLI | `~/.kimi-code/AGENTS.md` | 暂无钩子，文件交接完整可用 |
+| Kimi Code CLI | `~/.kimi-code/AGENTS.md` | Hook 与五类事件回放已实现；真实新会话待接线验收 |
+| Kimi Work | 通过本地 Skill 与项目文件接入 | 生命周期兼容性未验证，不假定复用 CLI Hooks |
 | 其他 AGENTS.md 兼容客户端 | 项目根 `AGENTS.md` | 文件交接完整可用 |
+
+Kimi CLI Hooks 位于 `$KIMI_CODE_HOME/config.toml`（默认 `~/.kimi-code/config.toml`），不是项目级文件。启用、查看和停用均须显式运行上表命令；配置工具只增删 `project-handoff:kimi-hooks:v1` 受管块，不重写其他 Hooks 或设置。提示词事件以纯文本注入交接路径，启动事件只负责记录。
 
 > 钩子自动记录需要 macOS 或 Linux、Python 3.9+。各客户端钩子成熟度不同，`--doctor` 会如实报告你本机每家的接线状态；接不上的客户端不影响文件交接。
 
@@ -130,7 +136,7 @@ project-handoff-skill/
 │       ├── STARTUP.md           # 新会话启动检查（含服务手册）
 │       └── templates/           # 开关 / 交接 / 钩子模板 + 核心脚本
 ├── docs/specs/                  # 设计文档
-├── tests/                       # 回放测试矩阵（45 个用例）
+├── tests/                       # 回放测试矩阵（91 个用例）
 └── .github/workflows/           # CI：macOS + Linux × Python 3.10 / 3.13
 ```
 
@@ -160,7 +166,7 @@ git -C ~/.agents/skills/project-handoff pull   # 全局安装的路径；项目�
 不会。首次询问一次，之后有效配置直接沿用；配置坏了会点名问题，不会装作没配置过。
 
 **换一个它不认识的 agent 还能用吗？**
-能。共享工件只依赖 AGENTS.md 通用约定，任何兼容客户端读同一份文件交接；新客户端的自动记录支持是加一行配置数据的事。
+能。共享工件只依赖 AGENTS.md 通用约定，任何兼容客户端读同一份文件交接；自动记录通过客户端薄适配和真实会话验收接入，Kimi 这类用户级钩子格式另有独立、可回滚的配置命令。
 
 **文件会越攒越多拖垮项目吗？**
 不会。运行记录每 agent 保留 20 条，更旧的压成归档索引单行；交接记录超 8KB / 300 行自动瘦身，只留最近 3 节，其余进归档——agent 平时只读小文件。

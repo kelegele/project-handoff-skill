@@ -6,7 +6,7 @@
 2. 文件存在且有效时，不再询问。关闭则直接进行原任务；开启则按项目的 AGENTS.md 和 HANDOVER.md 工作。配置损坏或启用后钩子缺失时报告具体问题，不把它当成首次询问，也不要擅自覆盖。
 3. 文件不存在时，询问「是否为这个项目开启多 Agent 交接和自动运行记录？开启 / 关闭 / 稍后决定」。项目已有交接或钩子时仍询问，并说明检测到的内容。等用户作出选择后再改配置；稍后决定或未回答时不写文件。用户可继续原任务，下个新会话再检查。
 4. 选择关闭时，将模板 `disabled.json` 复制为项目根目录的 `.agent-handoff.json`。关闭此模式不移除已有历史记录；若发现独立旧钩子仍在执行，说明并仅停用属于本模式的钩子。
-5. 选择开启时，先检查已有配置，保留已有规则、交接记录及其他钩子。把脚本模板复制到项目的 `scripts/agent_hook.py`（遇同名不同内容先核对），将规则合并到 AGENTS.md，只在 HANDOVER.md 不存在时复制模板。按已确认使用且格式兼容的 Agent 合并其钩子配置，不覆盖现有事件。把每个 `__COMMAND__` 替换为安全引用的本机 Python 3.9+（钩子脚本需要 macOS 或 Linux） 绝对路径、目标项目脚本绝对路径和对应的 `--agent Codex`、`--agent ZCode` 或 `--agent QwenWork`。去重后再写配置。Codex 使用项目配置层并走正常钩子信任流程；QwenWork 配置只适用于读取 .qwen/settings.json 的 Qwen Code 引擎。完成文件准备后，将 `enabled.json` 复制为项目根目录的 `.agent-handoff.json`。钩子格式尚未验证的客户端（例如 Kimi Code CLI）仍可启用文件交接，并说明自动记录尚未接入。
+5. 选择开启时，先检查已有配置，保留已有规则、交接记录及其他钩子。把脚本模板复制到项目的 `scripts/agent_hook.py`（遇同名不同内容先核对），将规则合并到 AGENTS.md，只在 HANDOVER.md 不存在时复制模板。按已确认使用且格式兼容的 Agent 合并其钩子配置，不覆盖现有事件。把每个 `__COMMAND__` 替换为安全引用的本机 Python 3.9+（钩子脚本需要 macOS 或 Linux） 绝对路径、目标项目脚本绝对路径和对应的 `--agent Codex`、`--agent ZCode` 或 `--agent QwenWork`。去重后再写配置。Codex 使用项目配置层并走正常钩子信任流程；QwenWork 配置只适用于读取 .qwen/settings.json 的 Qwen Code 引擎。完成文件准备后，将 `enabled.json` 复制为项目根目录的 `.agent-handoff.json`。Kimi Code CLI 的用户级 Hooks 不随项目开关自动修改；只有用户明确要求启用 Kimi 自动记录时，才运行安装副本的 `--kimi-hooks enable`。Kimi Work 尚未完成生命周期验证，不得假定它复用 CLI Hooks。其他未验证客户端仍可启用文件交接，并说明自动记录尚未接入。
 6. 报告启用状态和实际验证结果。通过新的真实会话检查 `docs/execution/agent-runs/`；已写入配置、已加载和已触发要分别报告。如果旧进程未加载，保存工作后再重新打开客户端。业务任务的完成情况由 Agent 核对和记录。
 7. 后续用户可明确要求切换模式。重新读取项目配置，按上面的开启或关闭流程处理；只有用户明确要求时才改已有选择。
 
@@ -22,8 +22,11 @@
 | --- | --- | --- |
 | 为本项目开启交接 | `<脚本> --enable` | `<脚本> --doctor` 无 FAIL |
 | 关闭（保留全部记录） | `<脚本> --disable` | `<脚本> --status` 显示关闭 |
+| 启用 Kimi CLI 自动记录 | `<脚本> --kimi-hooks enable` | `<脚本> --kimi-hooks status` 显示已接线；新会话检查运行记录 |
+| 查看 Kimi CLI 接线 | `<脚本> --kimi-hooks status` | 只读报告，不输出其他配置 |
+| 停用 Kimi CLI 自动记录 | `<脚本> --kimi-hooks disable` | 受管块移除，其他 TOML 内容保留 |
 | 体检（钩子/配置/权限） | `<脚本> --doctor` | 按 PASS/FAIL/WARN 逐条处理 |
 | 运行记录与 HANDOVER 瘦身 | `<脚本> --gc` | 输出的前后占用对比 |
 | 看状态/这是什么/怎么卸载 | `<脚本> --status` | 报告本身 |
 
-命令幂等可重入；配置存在但无效时命令会点名问题并退出非零，不修改任何文件。
+命令幂等可重入；配置存在但无效时命令会点名问题并退出非零，不修改任何文件。Kimi Hooks 写入 `$KIMI_CODE_HOME/config.toml`（未设置时为 `~/.kimi-code/config.toml`），只增删 `project-handoff:kimi-hooks:v1` 受管块，不重写其他配置。

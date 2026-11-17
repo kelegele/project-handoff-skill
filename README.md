@@ -79,6 +79,9 @@ Once installed, every new session does one thing automatically: check the switch
 | `agent_hook.py --doctor` | Checkup: config / hook wiring / permissions / timezone |
 | `agent_hook.py --status` | Self-explaining report: mode, entry chain, file ownership, recent runs, usage, uninstall steps |
 | `agent_hook.py --gc` | Rotate run records + compact the handover file |
+| `agent_hook.py --kimi-hooks enable` | Explicitly enable Kimi CLI user-level hooks; never a project-enable side effect |
+| `agent_hook.py --kimi-hooks status` | Read-only Kimi CLI wiring status |
+| `agent_hook.py --kimi-hooks disable` | Remove only this system's managed Kimi hook block |
 
 ## Install
 
@@ -110,8 +113,11 @@ Grab `project-handoff.skill` from [Releases](https://github.com/kelegele/project
 |---|---|---|
 | Codex | `~/.codex/AGENTS.md` | ✅ Hook verified in real sessions |
 | ZCode | `~/.zcode/AGENTS.md` | Template ready; real-session acceptance in progress |
-| Kimi Code CLI | `~/.kimi-code/AGENTS.md` | No hooks yet; file-based handoff fully works |
+| Kimi Code CLI | `~/.kimi-code/AGENTS.md` | Five-event adapter and replay tests implemented; real-session wiring acceptance pending |
+| Kimi Work | Local Skill and project files | Lifecycle compatibility unverified; CLI hooks are not assumed |
 | Other AGENTS.md-compatible clients | project-root `AGENTS.md` | File-based handoff fully works |
+
+Kimi CLI hooks live in `$KIMI_CODE_HOME/config.toml` (default `~/.kimi-code/config.toml`), not in a project file. Enable, inspect, or disable them only with the explicit commands above. The config command changes only the `project-handoff:kimi-hooks:v1` managed block and preserves other hooks and settings. Prompt events inject the handoff path as plain text; session-start events only record metadata.
 
 > Auto-logging hooks need macOS or Linux with Python 3.9+. Hook maturity varies per client; `--doctor` reports your machine's actual wiring honestly. Clients without hooks still get full file-based handoff.
 
@@ -130,7 +136,7 @@ project-handoff-skill/
 │       ├── STARTUP.md           # New-session check (with service manual)
 │       └── templates/           # Switch / handover / hook templates + core script
 ├── docs/specs/                  # Design documents
-├── tests/                       # Replay test matrix (45 cases)
+├── tests/                       # Replay test matrix (91 cases)
 └── .github/workflows/           # CI: macOS + Linux × Python 3.10 / 3.13
 ```
 
@@ -160,7 +166,7 @@ git -C ~/.agents/skills/project-handoff pull
 No. It asks once, then honors the saved choice. If the config is corrupt it names the problem instead of pretending nothing was configured.
 
 **Does it work with an agent it has never heard of?**
-Yes. Shared artifacts depend only on the AGENTS.md convention; any compatible client reads the same file-based handoff. Adding auto-logging for a new client is one line of config data.
+Yes. Shared artifacts depend only on the AGENTS.md convention; any compatible client reads the same file-based handoff. Auto-logging uses a small client-specific adapter and real-session verification; user-level hook formats such as Kimi's also get an explicit, reversible config command.
 
 **Will the files pile up and drown the project?**
 No. Run records keep the newest 20 per agent, older ones compress to one-line archive entries; the handover file compacts past 8KB / 300 lines, keeping the 3 most recent sections — agents normally read only small files.

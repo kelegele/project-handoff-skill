@@ -1,0 +1,26 @@
+# >>> project-handoff:kimi-hooks:v1 >>>
+[[hooks]]
+event = "SessionStart"
+command = __COMMAND__
+timeout = 5
+
+[[hooks]]
+event = "UserPromptSubmit"
+command = __COMMAND__
+timeout = 5
+
+[[hooks]]
+event = "Stop"
+command = __COMMAND__
+timeout = 5
+
+[[hooks]]
+event = "Interrupt"
+command = __COMMAND__
+timeout = 5
+
+[[hooks]]
+event = "SessionEnd"
+command = __COMMAND__
+timeout = 5
+# <<< project-handoff:kimi-hooks:v1 <<<

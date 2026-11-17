@@ -2,6 +2,14 @@
 
 版本号：vMAJOR.MINOR.PATCH。MINOR 功能新增、PATCH 修订、MAJOR 架构级变更。
 
+## Unreleased
+
+### Added
+
+- Kimi Code CLI：新增 `--agent Kimi` 五类生命周期事件记录，提示词事件使用纯文本注入交接路径；既有 Agent 输出协议不变
+- 新增 `--kimi-hooks enable|status|disable`：独立管理 `$KIMI_CODE_HOME/config.toml` 中的五类 Hooks，只修改受管块，支持幂等、冲突零写入与回滚
+- 新增 Kimi 事件、现有 Agent 回归和用户级配置测试；Kimi Work 生命周期支持仍待真实验证，不作兼容承诺
+
 ## v0.2.0 - 2026-11-12
 
 ### Added

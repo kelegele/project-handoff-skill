@@ -5,8 +5,10 @@ import fcntl
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 import sys
 from datetime import datetime, timedelta
@@ -255,6 +257,167 @@ def _count_runs(runs_dir: Path) -> int:
                if d.is_dir() and d.name != 'archive') if runs_dir.is_dir() else 0
 
 
+KIMI_HOOK_BEGIN = '# >>> project-handoff:kimi-hooks:v1 >>>'
+KIMI_HOOK_END = '# <<< project-handoff:kimi-hooks:v1 <<<'
+KIMI_EVENTS = ('SessionStart', 'UserPromptSubmit', 'Stop', 'Interrupt', 'SessionEnd')
+
+
+def _kimi_config_path() -> Path:
+    configured = os.environ.get('KIMI_CODE_HOME')
+    base = Path(configured).expanduser() if configured else Path.home() / '.kimi-code'
+    return base / 'config.toml'
+
+
+def _read_kimi_config(path: Path) -> str:
+    return path.read_bytes().decode('utf-8') if path.is_file() else ''
+
+
+def _kimi_managed_bounds(text: str):
+    begins, ends = text.count(KIMI_HOOK_BEGIN), text.count(KIMI_HOOK_END)
+    if begins != ends or begins > 1:
+        raise ValueError('配置冲突：Kimi Hooks 受管标记不完整或重复')
+    if begins == 0:
+        return None
+    start = text.index(KIMI_HOOK_BEGIN)
+    close = text.index(KIMI_HOOK_END)
+    if close < start:
+        raise ValueError('配置冲突：Kimi Hooks 受管标记顺序错误')
+    end = close + len(KIMI_HOOK_END)
+    if text[end:end + 2] == '\r\n':
+        end += 2
+    elif text[end:end + 1] == '\n':
+        end += 1
+    return start, end
+
+
+def _kimi_command_value(line: str):
+    stripped = line.strip()
+    if not stripped.startswith('command'):
+        return None
+    assignment = stripped[len('command'):].lstrip()
+    if not assignment.startswith('='):
+        return None
+    raw = assignment[1:].strip()
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}:
+            raw = raw[1:-1]
+        return raw if 'agent_hook.py' in raw and 'Kimi' in raw else None
+    return value if isinstance(value, str) else None
+
+
+def _kimi_command_is_ours(command: str) -> bool:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    if not any(token.endswith('agent_hook.py') for token in tokens):
+        return False
+    return '--agent=Kimi' in tokens or any(
+        token == '--agent' and index + 1 < len(tokens) and tokens[index + 1] == 'Kimi'
+        for index, token in enumerate(tokens)
+    )
+
+
+def _has_unmanaged_kimi_command(text: str) -> bool:
+    for line in text.splitlines():
+        if line.lstrip().startswith('#'):
+            continue
+        command = _kimi_command_value(line)
+        if command is not None and _kimi_command_is_ours(command):
+            return True
+    return False
+
+
+def _kimi_block_valid(block: str) -> bool:
+    sections = block.split('[[hooks]]')
+    if len(sections) != len(KIMI_EVENTS) + 1:
+        return False
+    for name, section in zip(KIMI_EVENTS, sections[1:]):
+        if section.count(f'event = "{name}"') != 1:
+            return False
+        commands = [_kimi_command_value(line) for line in section.splitlines()]
+        commands = [command for command in commands if command is not None]
+        if len(commands) != 1 or not _kimi_command_is_ours(commands[0]):
+            return False
+    return True
+
+
+def _kimi_hook_state():
+    path = _kimi_config_path()
+    try:
+        text = _read_kimi_config(path)
+        bounds = _kimi_managed_bounds(text)
+    except (OSError, UnicodeError):
+        return path, '存在但不可读'
+    except ValueError:
+        return path, '配置冲突'
+    outside = text if bounds is None else text[:bounds[0]] + text[bounds[1]:]
+    if _has_unmanaged_kimi_command(outside):
+        return path, '存在未受管 Kimi 命令'
+    if bounds is None:
+        return path, '未接线'
+    block = text[bounds[0]:bounds[1]]
+    return path, '已接线' if _kimi_block_valid(block) else '受管块内容异常'
+
+
+def _render_kimi_hooks() -> str:
+    command = (f'{shlex.quote(sys.executable)} '
+               f'{shlex.quote(str(Path(__file__).resolve()))} --agent Kimi')
+    template = (_templates_dir() / 'kimi-code-hooks.toml').read_text()
+    return template.replace('__COMMAND__', json.dumps(command, ensure_ascii=False))
+
+
+def _write_kimi_config(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, tmp_name = tempfile.mkstemp(prefix=f'.{path.name}.project-handoff-',
+                                            dir=path.parent)
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(text.encode('utf-8'))
+            output.flush()
+            os.fsync(output.fileno())
+        if path.exists():
+            os.chmod(tmp, path.stat().st_mode & 0o777)
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
+def cmd_kimi_hooks(action: str) -> int:
+    path, state = _kimi_hook_state()
+    if action == 'status':
+        print(f'Kimi Code CLI Hooks（{path}）：{state}')
+        return 0
+    if state in {'存在但不可读', '配置冲突', '存在未受管 Kimi 命令'}:
+        print(f'Kimi Hooks {state}，未修改任何文件：{path}')
+        return 2
+    try:
+        text = _read_kimi_config(path)
+        bounds = _kimi_managed_bounds(text)
+        if action == 'disable':
+            if bounds is None:
+                print(f'Kimi Hooks 未接线，无需修改：{path}')
+                return 0
+            updated = text[:bounds[0]] + text[bounds[1]:]
+        else:
+            block = _render_kimi_hooks()
+            if bounds is None:
+                separator = '' if not text or text.endswith(('\n', '\r')) else '\n'
+                updated = text + separator + block
+            else:
+                updated = text[:bounds[0]] + block + text[bounds[1]:]
+        _write_kimi_config(path, updated)
+    except (OSError, UnicodeError, ValueError) as exc:
+        print(f'Kimi Hooks 写入失败（{type(exc).__name__}），未修改任何文件：{path}')
+        return 2
+    print(f'Kimi Hooks 已{"启用" if action == "enable" else "停用"}：{path}（仅修改受管块）')
+    return 0
+
+
 HOOK_CONFIGS = {'.codex/hooks.json': 'Codex', '.zcode/config.json': 'ZCode',
                 '.qwen/settings.json': 'QwenWork', '.pi/extensions/project-handoff.ts': 'Pi'}
 
@@ -288,6 +451,8 @@ def cmd_status(root: Path) -> int:
     print('入口链：')
     for agent, rel, state in _hook_chain(root):
         print(f'  - {agent}（{rel}）：{state}')
+    kimi_path, kimi_state = _kimi_hook_state()
+    print(f'  - Kimi Code CLI（{kimi_path}）：{kimi_state}')
     print('文件所有权（以下属于本系统）：.agent-handoff.json、AGENTS.md「多 Agent 交接」段、'
           'HANDOVER.md、docs/execution/（运行记录与归档）')
     runs_dir = root / 'docs' / 'execution' / 'agent-runs'
@@ -344,6 +509,9 @@ def cmd_doctor(root: Path) -> int:
             warn('入口链', f'{agent}（{rel}）未接线——文件交接仍可用（L0/L1）')
         elif '未指向' in state or '不可读' in state:
             warn('入口链', f'{agent}（{rel}）{state}')
+    kimi_path, kimi_state = _kimi_hook_state()
+    if kimi_state != '已接线':
+        warn('入口链', f'Kimi Code CLI（{kimi_path}）{kimi_state}——文件交接仍可用（L0/L1）')
     agents_md = root / 'AGENTS.md'
     check(agents_md.is_file() and AGENTS_SECTION_MARKER in agents_md.read_text(),
           'AGENTS.md 交接段在位')
@@ -378,13 +546,16 @@ def cmd_gc(root: Path, keep_per_agent: int = 20, min_per_agent: int = 2,
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--agent', default=None, choices=['Codex', 'ZCode', 'QwenWork', 'Pi'])
+    parser.add_argument('--agent', default=None, choices=['Codex', 'ZCode', 'QwenWork', 'Pi', 'Kimi'])
     parser.add_argument('--enable', action='store_true')
     parser.add_argument('--disable', action='store_true')
     parser.add_argument('--gc', action='store_true')
     parser.add_argument('--status', action='store_true')
     parser.add_argument('--doctor', action='store_true')
+    parser.add_argument('--kimi-hooks', choices=['enable', 'status', 'disable'])
     args = parser.parse_args()
+    if args.kimi_hooks:
+        return cmd_kimi_hooks(args.kimi_hooks)
     if args.enable or args.disable or args.gc or args.status or args.doctor:
         root = resolve_project_root(Path.cwd(), Path.home())
         if root is None:
@@ -473,9 +644,15 @@ def main():
                    '先读 AGENTS.md、HANDOVER.md 及对应任务台账；沿用业务任务编号。'
                    f'结束前更新对应任务记录和 {handover.relative_to(ROOT)} 的简短摘要／入口，'
                    '并同步 HANDOVER.md，最终回复附记录路径；自动运行状态不等于任务完成。')
-        print(json.dumps({'hookSpecificOutput': {'hookEventName': name, 'additionalContext': context}}, ensure_ascii=False))
+        if args.agent == 'Kimi':
+            print(context if name == 'UserPromptSubmit' else '{}')
+        else:
+            print(json.dumps({'hookSpecificOutput': {'hookEventName': name, 'additionalContext': context}}, ensure_ascii=False))
     elif name == 'Stop' and '待填写' in handover.read_text():
-        print(json.dumps({'systemMessage': f'运行状态已保存；交接记录尚有待填写项：{handover.relative_to(ROOT)}。请补齐任务摘要或已有台账入口；本提示不代表业务验收。'}, ensure_ascii=False))
+        if args.agent == 'Kimi':
+            print(f'运行状态已保存；交接记录尚有待填写项：{handover.relative_to(ROOT)}。请补齐任务摘要或已有台账入口；本提示不代表业务验收。')
+        else:
+            print(json.dumps({'systemMessage': f'运行状态已保存；交接记录尚有待填写项：{handover.relative_to(ROOT)}。请补齐任务摘要或已有台账入口；本提示不代表业务验收。'}, ensure_ascii=False))
     else:
         print('{}')
 
