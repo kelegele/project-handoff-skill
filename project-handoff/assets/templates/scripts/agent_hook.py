@@ -546,7 +546,7 @@ def cmd_gc(root: Path, keep_per_agent: int = 20, min_per_agent: int = 2,
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--agent', default=None, choices=['Codex', 'ZCode', 'QwenWork', 'Pi', 'Kimi'])
+    parser.add_argument('--agent', default=None, choices=['Codex', 'ZCode', 'QwenWork', 'Pi', 'Kimi', 'DSH'])
     parser.add_argument('--enable', action='store_true')
     parser.add_argument('--disable', action='store_true')
     parser.add_argument('--gc', action='store_true')

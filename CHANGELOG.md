@@ -9,6 +9,7 @@
 - Kimi Code CLI：新增 `--agent Kimi` 五类生命周期事件记录，提示词事件使用纯文本注入交接路径；既有 Agent 输出协议不变
 - 新增 `--kimi-hooks enable|status|disable`：独立管理 `$KIMI_CODE_HOME/config.toml` 中的五类 Hooks，只修改受管块，支持幂等、冲突零写入与回滚
 - 新增 Kimi 事件、现有 Agent 回归和用户级配置测试；Kimi Work 生命周期支持仍待真实验证，不作兼容承诺
+- DeepSeek Harness（DSH）：`--agent` 新增 `DSH`；新增官方实验性桥接线模板 `templates/dsh-hooks.json`（SessionStart / UserPromptSubmit / Stop 三事件、`__COMMAND__` 占位，经 `@deepseek-ai/dsh-hooks-codex` 桥喂给共享脚本）；DSH 指令入口为 `<agentsHome>/AGENTS.md`（默认 `~/.agents/AGENTS.md`）。桥暂不映射 Interrupt / SessionEnd（孤儿 run 由心跳超时回收），systemMessage 提醒暂不透出
 
 ## v0.2.0 - 2026-11-12
 

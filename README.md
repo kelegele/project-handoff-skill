@@ -113,11 +113,15 @@ Grab `project-handoff.skill` from [Releases](https://github.com/kelegele/project
 |---|---|---|
 | Codex | `~/.codex/AGENTS.md` | ✅ Hook verified in real sessions |
 | ZCode | `~/.zcode/AGENTS.md` | Template ready; real-session acceptance in progress |
+| Pi | `~/.pi/AGENTS.md` | TS extension adapter; real-session acceptance pending |
 | Kimi Code CLI | `~/.kimi-code/AGENTS.md` | Five-event adapter and replay tests implemented; real-session wiring acceptance pending |
 | Kimi Work | Local Skill and project files | Lifecycle compatibility unverified; CLI hooks are not assumed |
+| DeepSeek Harness (DSH) | `~/.agents/AGENTS.md` | Official experimental Codex-hooks bridge (`dsh-hooks-codex`) wired; replay tests passed; real-session acceptance pending |
 | Other AGENTS.md-compatible clients | project-root `AGENTS.md` | File-based handoff fully works |
 
 Kimi CLI hooks live in `$KIMI_CODE_HOME/config.toml` (default `~/.kimi-code/config.toml`), not in a project file. Enable, inspect, or disable them only with the explicit commands above. The config command changes only the `project-handoff:kimi-hooks:v1` managed block and preserves other hooks and settings. Prompt events inject the handoff path as plain text; session-start events only record metadata.
+
+DeepSeek Harness auto-logging rides the official experimental bridge `@deepseek-ai/dsh-hooks-codex`: a machine-level `dsh-hooks.json` (referenced from the DSH profile) feeds SessionStart / UserPromptSubmit / Stop to the shared script with `--agent DSH`; hooks run with the session's working directory, so per-project on/off semantics are preserved. `Interrupt` / `SessionEnd` have no bridge mapping yet — orphaned runs are reclaimed by the heartbeat timeout.
 
 > Auto-logging hooks need macOS or Linux with Python 3.9+. Hook maturity varies per client; `--doctor` reports your machine's actual wiring honestly. Clients without hooks still get full file-based handoff.
 
