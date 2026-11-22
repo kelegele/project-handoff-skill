@@ -2,7 +2,7 @@
 
 版本号：vMAJOR.MINOR.PATCH。MINOR 功能新增、PATCH 修订、MAJOR 架构级变更。
 
-## Unreleased
+## v0.3.0 - 2026-11-22
 
 ### Added
 
